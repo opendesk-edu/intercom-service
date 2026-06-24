@@ -11,45 +11,40 @@ const { createProxyMiddleware } = require("http-proxy-middleware");
 const { stripIntercomCookies, massageCors, logger } = require("../utils");
 const { corsOptions, logLevel, nordeck, matrix } = require("../config");
 
-/**
- * @name /nob/
- * @desc
- * Proxy for the Nordeck Bot (or just the plain Matrix UserInfo Service in testing).
- * Adds the proper Authorization Header
- */
-router.use(
-  "/",
-  createProxyMiddleware({
-    target: nordeck.url,
-    logLevel,
-    logger,
-    changeOrigin: true,
-    pathRewrite: { "^/nob": "" },
-    secure: false,
-    onProxyReq: function onProxyReq(proxyReq, req, res) {
-      stripIntercomCookies(proxyReq);
-      // TODO: Build Switch for Nordeck Live Mode
-      // Example headers.set('authorization', `MX-Identity ${btoa(JSON.stringify(t))}`);
-      // or  proxyReq.setHeader('authorization', `Bearer ${matrix_access_token}`);
-
-      if (!req.appSession[matrix.session_storage_key]) {
-        logger.info(
-          "No Matrix session found in appSession. Likely Matrix is not configured",
+if (nordeck.url) {
+  router.use(
+    "/",
+    createProxyMiddleware({
+      target: nordeck.url,
+      logLevel,
+      logger,
+      changeOrigin: true,
+      pathRewrite: { "^/nob": "" },
+      secure: false,
+      onProxyReq: function onProxyReq(proxyReq, req, res) {
+        stripIntercomCookies(proxyReq);
+        if (!req.appSession[matrix.session_storage_key]) {
+          logger.info(
+            "No Matrix session found in appSession. Likely Matrix is not configured",
+          );
+          return;
+        }
+        proxyReq.setHeader(
+          "authorization",
+          `Bearer ${req.appSession[matrix.session_storage_key]}`,
         );
-        return;
-      }
-      // Provide access_token via authentication bearer token header
-      // https://spec.matrix.org/v1.4/client-server-api/#client-authentication
-      proxyReq.setHeader(
-        "authorization",
-        `Bearer ${req.appSession[matrix.session_storage_key]}`,
-      );
-    },
-    onProxyRes: function (proxyRes, req, res) {
-      // TODO: Matrix seems to be specific with it's headers, we have to decide whether to steamroll or to massage...
-      massageCors(req, proxyRes, corsOptions.origin);
-    },
-  }),
-);
+      },
+      onProxyRes: function (proxyRes, req, res) {
+        massageCors(req, proxyRes, corsOptions.origin);
+      },
+    }),
+  );
+} else {
+  router.use("/", (req, res) => {
+    res
+      .status(404)
+      .json({ error: "Nordeck integration is not configured" });
+  });
+}
 
 module.exports = router;

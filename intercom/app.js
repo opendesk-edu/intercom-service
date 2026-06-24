@@ -1,6 +1,9 @@
 /**
  * SPDX-License-Identifier: AGPL-3.0-only
  * SPDX-FileCopyrightText: 2024-2025 Univention GmbH
+ * SPDX-FileCopyrightText: 2026 openDesk Edu Team
+ *
+ * openDesk Edu fork — extended with OpenCloud, SOGo, and ILIAS proxy routes.
  */
 
 /*
@@ -29,6 +32,9 @@ const {
   intercom,
   xwiki,
   nextcloud,
+  opencloud,
+  sogo,
+  ilias,
   matrix,
   userUniqueMapper,
 } = require("./config");
@@ -44,11 +50,14 @@ const {
 const {
   backchannelLogout,
   fs,
+  oc,
   wiki,
   nob,
   navigation,
   silent,
   uuid,
+  sogo: sogoRoute,
+  ilias: iliasRoute,
 } = require("./routes");
 
 const {
@@ -85,11 +94,10 @@ app.use(
       },
     },
     afterCallback: async (req, res, session, decodedState) => {
-      // TODO: Add some kind of error handling, if tokens can't be fetched the user should see an error message of some sort
       try {
         var ret = {};
 
-        // fetch token for xwiki
+        // Token exchange for XWiki
         if (!(xwiki.session_storage_key in session) && xwiki.enabled) {
           ret[xwiki.session_storage_key] = await fetchOIDCToken(
             session.access_token,
@@ -97,10 +105,35 @@ app.use(
           );
         }
 
+        // Token exchange for Nextcloud (legacy)
         if (!(nextcloud.session_storage_key in session) && nextcloud.enabled) {
           ret[nextcloud.session_storage_key] = await fetchOIDCToken(
             session.access_token,
             nextcloud.audience,
+          );
+        }
+
+        // Token exchange for OpenCloud
+        if (!(opencloud.session_storage_key in session) && opencloud.enabled) {
+          ret[opencloud.session_storage_key] = await fetchOIDCToken(
+            session.access_token,
+            opencloud.audience,
+          );
+        }
+
+        // Token exchange for SOGo
+        if (!(sogo.session_storage_key in session) && sogo.enabled) {
+          ret[sogo.session_storage_key] = await fetchOIDCToken(
+            session.access_token,
+            sogo.audience,
+          );
+        }
+
+        // Token exchange for ILIAS
+        if (!(ilias.session_storage_key in session) && ilias.enabled) {
+          ret[ilias.session_storage_key] = await fetchOIDCToken(
+            session.access_token,
+            ilias.audience,
           );
         }
 
@@ -139,6 +172,10 @@ app.get("/", function (req, res) {
   res.send("<p>Hello</p>");
 });
 
+app.get("/health", function (req, res) {
+  res.json({ status: "ok" });
+});
+
 /**
  * @name /backchannel-logout
  * @desc
@@ -165,10 +202,9 @@ app.use(
 /**
  * @name /fs/
  * @desc
- * Proxy for Nextcloud.
+ * Proxy for Nextcloud (legacy upstream).
  * Adds the proper Authorization Header
  * @example PROPFIND http://ics.domain.test/fs/remote.php/dav/files/usera1/Photos
- *
  */
 app.use(
   "/fs",
@@ -180,11 +216,26 @@ app.use(
 );
 
 /**
+ * @name /oc/
+ * @desc
+ * Proxy for OpenCloud (openDesk Edu primary file service).
+ * Adds the proper Authorization Header via OIDC token exchange.
+ * @example PROPFIND http://ics.domain.test/oc/dav/files/usera1/Photos
+ */
+app.use(
+  "/oc",
+  requiresAuth(),
+  refreshIntercomTokenIfNeeded,
+  oidcVerifyDecodeAccessToken(attemptSilentLogin),
+  refreshOIDCTokenIfNeeded(opencloud),
+  oc,
+);
+
+/**
  * @name /wiki/
  * @desc
  * Proxy for XWiki.
  * Adds the proper Authorization Header
- * @example GET http://ics.domain.test/wiki/bin/get/Blog/BlogRss?xpage=plain&blog=some.Newsfeed.WebHome
  */
 app.use(
   "/wiki",
@@ -192,6 +243,36 @@ app.use(
   refreshIntercomTokenIfNeeded,
   refreshOIDCTokenIfNeeded(xwiki),
   wiki,
+);
+
+/**
+ * @name /sogo/
+ * @desc
+ * Proxy for SOGo Groupware (CalDAV, CardDAV, mail).
+ * Adds the proper Authorization Header via OIDC token exchange.
+ */
+app.use(
+  "/sogo",
+  requiresAuth(),
+  refreshIntercomTokenIfNeeded,
+  oidcVerifyDecodeAccessToken(attemptSilentLogin),
+  refreshOIDCTokenIfNeeded(sogo),
+  sogoRoute,
+);
+
+/**
+ * @name /ilias/
+ * @desc
+ * Proxy for ILIAS LMS (REST API, file upload/download).
+ * Adds the proper Authorization Header via OIDC token exchange.
+ */
+app.use(
+  "/ilias",
+  requiresAuth(),
+  refreshIntercomTokenIfNeeded,
+  oidcVerifyDecodeAccessToken(attemptSilentLogin),
+  refreshOIDCTokenIfNeeded(ilias),
+  iliasRoute,
 );
 
 /**
@@ -214,8 +295,6 @@ app.use(
  * @desc
  * Performs a "silent login", eg logs the user into the intercom service without interaction
  * if the user is already logged in to keycloak.
- *
- * Reports the Session Status via window.postmessage (JSON: {"loggedIn": true})
  */
 app.use(
   "/silent",

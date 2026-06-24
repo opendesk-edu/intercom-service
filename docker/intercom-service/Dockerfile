@@ -1,49 +1,42 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # SPDX-FileCopyrightText: 2024-2025 Univention GmbH
+# SPDX-FileCopyrightText: 2026 openDesk Edu Team
+#
+# openDesk Edu fork — standard Node.js base image (no Univention UCS dependency)
 
-ARG UCS_BASE_IMAGE_TAG=5.2.5-build.20260514@sha256:81b104694a78cf36043f84b5d9e4b3b0cbbe6777e46877239a44f08249379119
-ARG UCS_BASE_IMAGE=gitregistry.knut.univention.de/univention/dev/projects/ucs-base-image/ucs-base
+FROM node:20-alpine AS base
 
-FROM ${UCS_BASE_IMAGE}:${UCS_BASE_IMAGE_TAG} AS common
-
-# hadolint ignore=DL3008
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    "curl" \
-    "nodejs" \
-    "yarnpkg" \
-    "ca-certificates" \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache curl
 
 WORKDIR /app
-COPY . /app
 
-RUN yarnpkg install
+# Copy package files first for better caching
+COPY intercom/package.json intercom/yarn.lock /app/
+RUN yarnpkg install --production
+
+# Copy the rest of the app
+COPY intercom/ /app/
+
 ###############################################################################
-FROM common AS dev
+FROM base AS dev
 
 EXPOSE 8008
 
-#ENV DEBUG=express:*
-CMD ["nodejs", "app.js"]
+ENV NODE_ENV=development
+CMD ["node", "app.js"]
 
 ###############################################################################
-FROM common AS final
+FROM base AS final
 
-RUN \
-  apt-get purge -y yarnpkg \
-  && apt-get clean autoclean \
-  && apt-get autoremove --yes
-
-RUN \
-  find /var/lib/apt/lists /var/cache/apt/archives /var/log -type f -delete \
-  && rm -rfv /usr/share/doc /usr/share/man /usr/share/locale \
-     /usr/share/info /var/cache/apt /var/lib/apt/lists /var/lib/dpkg/*-old
+RUN apk del curl && \
+    rm -rf /var/cache/apk/* /tmp/*
 
 EXPOSE 8008
 
-RUN adduser app
+RUN adduser -D app
 USER app
 
-HEALTHCHECK --interval=60s --timeout=10s --start-period=10s CMD ./healthcheck.sh
+HEALTHCHECK --interval=60s --timeout=10s --start-period=10s \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8008/health || exit 1
 
-CMD ["nodejs", "app.js"]
+CMD ["node", "app.js"]

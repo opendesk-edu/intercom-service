@@ -1,6 +1,9 @@
 /**
  * SPDX-License-Identifier: AGPL-3.0-only
  * SPDX-FileCopyrightText: 2024-2025 Univention GmbH
+ * SPDX-FileCopyrightText: 2026 openDesk Edu Team
+ *
+ * openDesk Edu fork — extended with OpenCloud, SOGo, and ILIAS support.
  */
 
 const issuerBaseUrl =
@@ -11,7 +14,6 @@ const config = {
   corsOptions: {
     methods: "GET,POST,PUT,DELETE,PROPFIND,MKCOL",
     credentials: true,
-    // TODO: can we drop Authorization?
     exposedHeaders: [
       "etag",
       "dav",
@@ -33,7 +35,7 @@ const config = {
     process.env.SESSION_ROLLING_DURATION ?? 86400,
   ),
   userUniqueMapper: process.env.USER_UNIQUE_MAPPER ?? "entryuuid",
-  usernameClaim: process.env.USERNAME_CLAIM ?? "phoenixusername",
+  usernameClaim: process.env.USERNAME_CLAIM ?? "opendesk_username",
   nordeck: {
     url: process.env.NORDECK_URL,
   },
@@ -48,12 +50,37 @@ const config = {
     audience: process.env.XWIKI_AUDIENCE,
     session_storage_key: "xwiki_access_token",
   },
+  // Nextcloud (upstream compatibility — kept for legacy setups)
   nextcloud: {
     enabled: JSON.parse((process.env.NC_ENABLED ?? "false").toLowerCase()),
     name: "Nextcloud",
     url: process.env.NC_URL,
     audience: process.env.NC_AUDIENCE,
     session_storage_key: "nc_access_token",
+  },
+  // OpenCloud (openDesk Edu primary file service)
+  opencloud: {
+    enabled: JSON.parse((process.env.OC_ENABLED ?? "false").toLowerCase()),
+    name: "OpenCloud",
+    url: process.env.OC_URL,
+    audience: process.env.OC_AUDIENCE ?? "opendesk-opencloud",
+    session_storage_key: "oc_access_token",
+  },
+  // SOGo Groupware (CalDAV, CardDAV, mail)
+  sogo: {
+    enabled: JSON.parse((process.env.SOGO_ENABLED ?? "false").toLowerCase()),
+    name: "SOGo",
+    url: process.env.SOGO_URL,
+    audience: process.env.SOGO_AUDIENCE ?? "opendesk-sogo",
+    session_storage_key: "sogo_access_token",
+  },
+  // ILIAS Learning Management System (Phase 2)
+  ilias: {
+    enabled: JSON.parse((process.env.ILIAS_ENABLED ?? "false").toLowerCase()),
+    name: "ILIAS",
+    url: process.env.ILIAS_URL,
+    audience: process.env.ILIAS_AUDIENCE ?? "opendesk-ilias",
+    session_storage_key: "ilias_access_token",
   },
   intercom: {
     clientId: process.env.CLIENT_ID,

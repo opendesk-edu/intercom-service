@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: AGPL-3.0-only
  * SPDX-FileCopyrightText: 2024-2025 Univention GmbH
+ * SPDX-FileCopyrightText: 2026 openDesk Edu Team
  */
 
 const express = require("express");
@@ -9,36 +10,36 @@ const router = express.Router();
 const { createProxyMiddleware } = require("http-proxy-middleware");
 
 const { stripIntercomCookies, massageCors, logger } = require("../utils");
-const { corsOptions, logLevel, nextcloud } = require("../config");
+const { corsOptions, logLevel, ilias } = require("../config");
 
 /**
- * @name /fs/
+ * @name /ilias/
  * @desc
- * Proxy for Nextcloud (legacy — upstream compatibility).
- * Adds the proper Authorization Header
+ * Proxy for ILIAS LMS (REST API, file upload/download).
+ * Adds the proper Authorization Header via OIDC token exchange.
  */
-if (nextcloud.enabled && nextcloud.url) {
+if (ilias.enabled && ilias.url) {
   router.use(
     "/",
     createProxyMiddleware({
-      target: nextcloud.url,
+      target: ilias.url,
       logLevel,
       logger,
       changeOrigin: true,
       pathRewrite: {
-        "^/fs": "",
+        "^/ilias": "",
       },
       onProxyReq: function onProxyReq(proxyReq, req, res) {
         stripIntercomCookies(proxyReq);
-        if (!req.appSession[nextcloud.session_storage_key]) {
+        if (!req.appSession[ilias.session_storage_key]) {
           logger.info(
-            "No Nextcloud session found in appSession. Likely Nextcloud is not configured",
+            "No ILIAS session found in appSession. Likely ILIAS is not configured",
           );
           return;
         }
         proxyReq.setHeader(
           "authorization",
-          `Bearer ${req.appSession[nextcloud.session_storage_key]}`,
+          `Bearer ${req.appSession[ilias.session_storage_key]}`,
         );
       },
       onProxyRes: function (proxyRes, req, res) {
@@ -48,7 +49,7 @@ if (nextcloud.enabled && nextcloud.url) {
   );
 } else {
   router.use("/", (req, res) => {
-    res.status(404).json({ error: "Nextcloud integration is not enabled" });
+    res.status(404).json({ error: "ILIAS integration is not enabled" });
   });
 }
 

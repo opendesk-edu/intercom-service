@@ -1,31 +1,66 @@
-# intercom-service (ICS)
+# intercom-service (ICS) — openDesk Edu Fork
 
-ICS is an intermediary for communication between applications like Nextcloud,
-OX App Suite and Matrix. The functionalities File-picker, Video conference,
+ICS is an intermediary for communication between applications like SOGo, ILIAS,
+OpenCloud, Nextcloud, XWiki and Matrix. The functionalities File-picker, Video conference,
 create and accessing the Univention-Portal navigation endpoint from other apps
-require the app UCS Intercom Service.
-You can think of it as an authentication reverse-proxy.
+require the app intercom service.
 
-## Documentation
+This is an **openDesk Edu fork** of the upstream
+[Univention intercom-service](https://github.com/univention/intercom-service) (AGPL-3.0).
 
-Public documentation can be found [here](https://docs.software-univention.de/intercom-service/latest/).
+## What's different from upstream
 
-## Testing
+- **Standard Node.js base image** — no Univention UCS/UCs-base-image dependency
+- **OpenCloud support** — new `/oc` route replacing Nextcloud as primary file service
+- **SOGo Groupware support** — new `/sogo` route for CalDAV/CardDAV proxying
+- **ILIAS LMS support** — new `/ilias` route for REST API / file upload proxying
+- **Health endpoint** — `/health` returns `{"status": "ok"}`
+- **`opendesk_username`** as default username claim
 
-See [REVIEW.md](REVIEW.md) for testing instructions.
+## Upstream
+
+- **Source**: https://github.com/univention/intercom-service
+- **Documentation**: https://docs.software-univention.de/intercom-service/latest/
+- **License**: GNU Affero General Public License v3.0 (AGPL-3.0)
+
+## Endpoints
+
+| Path | Auth | Backend | Description |
+|------|------|---------|-------------|
+| `/oc/` | OIDC | OpenCloud | File picker, WebDAV |
+| `/sogo/` | OIDC | SOGo | CalDAV, CardDAV |
+| `/ilias/` | OIDC | ILIAS | REST API, file upload |
+| `/fs/` | OIDC | Nextcloud | Legacy — upstream compatibility |
+| `/wiki/` | OIDC | XWiki | RSS feeds, content |
+| `/nob/` | OIDC | Nordeck | Matrix meeting widget bot |
+| `/navigation.json` | OIDC | Portal | Portal central nav data |
+| `/silent` | OIDC | — | Silent login (iframe) |
+| `/backchannel-logout` | — | Keycloak | OIDC session logout |
+| `/uuid` | OIDC | — | User identity claim |
+| `/health` | — | — | Health check |
 
 ## Development
 
-This repository provides a `Tiltfile` for easier development. If you are new to
-tilt, please [check their documentation](https://tilt.dev/)
+```bash
+cd intercom
+cp .env.example .env.prod
+# Edit .env.prod with your values
+yarnpkg install
+yarn start
+```
 
-Here are some steps to get you up and running:
-1. Having tilt installed in your machine.
-2. Setup `gaia` cluster. Steps for doing so are [here](https://gitlab.souvap-univention.de/groups/souvap/devops/-/wikis/K8s-cluster-legacy).
-    > Note that you need to add your namespace to the Kubeconfig that is provided above.
-3. Run a pipeline in `souvereign-workplace` with the variables specified [here](https://gitlab.souvap-univention.de/souvap/devops/sovereign-workplace/-/pipelines/new?ref=main&var[NAMESPACE]=uv-username&var[CLUSTER]=gaia&var[BASE_DOMAIN]=open-desk.cloud&var[DEPLOY_KEYCLOAK]=yes&var[DEPLOY_UCS]=yes&var[DEPLOY_ELEMENT]=yes&var[DEPLOY_NEXTCLOUD]=yes&var[DEPLOY_ICS]=yes&var[DEPLOY_OX]=yes&var[ENV_STOP_BEFORE]=yes&var[RUN_TESTS]=no). Note you need to create a branch to run a pipeline.
-4. `cp tilt_config.json.example tilt_config.json` and fill your values with:
-    1. The path to the cloned [ICS helmcharts](https://gitlab.souvap-univention.de/souvap/tooling/charts/intercom-service)
-    2. Your username for [SouvAP GitLab](https://gitlab.souvap-univention.de)
-    3. An access token with `read_registry` scope geenrated from [here](https://gitlab.souvap-univention.de/-/profile/personal_access_tokens).
-5. Run `tilt up`.
+## Build
+
+```bash
+# Production image
+docker build -f docker/intercom-service/Dockerfile --target final -t intercom-service:latest .
+
+# Development image
+docker build -f docker/intercom-service/Dockerfile --target dev -t intercom-service:dev .
+```
+
+## License
+
+AGPL-3.0-only — see [LICENSE](LICENSE).
+SPDX-FileCopyrightText: 2024-2025 Univention GmbH
+SPDX-FileCopyrightText: 2026 openDesk Edu Team

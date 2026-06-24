@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: AGPL-3.0-only
  * SPDX-FileCopyrightText: 2024-2025 Univention GmbH
+ * SPDX-FileCopyrightText: 2026 openDesk Edu Team
  */
 
 const express = require("express");
@@ -9,36 +10,36 @@ const router = express.Router();
 const { createProxyMiddleware } = require("http-proxy-middleware");
 
 const { stripIntercomCookies, massageCors, logger } = require("../utils");
-const { corsOptions, logLevel, nextcloud } = require("../config");
+const { corsOptions, logLevel, opencloud } = require("../config");
 
 /**
- * @name /fs/
+ * @name /oc/
  * @desc
- * Proxy for Nextcloud (legacy — upstream compatibility).
- * Adds the proper Authorization Header
+ * Proxy for OpenCloud (openDesk Edu primary file service).
+ * Adds the proper Authorization Header via OIDC token exchange.
  */
-if (nextcloud.enabled && nextcloud.url) {
+if (opencloud.enabled && opencloud.url) {
   router.use(
     "/",
     createProxyMiddleware({
-      target: nextcloud.url,
+      target: opencloud.url,
       logLevel,
       logger,
       changeOrigin: true,
       pathRewrite: {
-        "^/fs": "",
+        "^/oc": "",
       },
       onProxyReq: function onProxyReq(proxyReq, req, res) {
         stripIntercomCookies(proxyReq);
-        if (!req.appSession[nextcloud.session_storage_key]) {
+        if (!req.appSession[opencloud.session_storage_key]) {
           logger.info(
-            "No Nextcloud session found in appSession. Likely Nextcloud is not configured",
+            "No OpenCloud session found in appSession. Likely OpenCloud is not configured",
           );
           return;
         }
         proxyReq.setHeader(
           "authorization",
-          `Bearer ${req.appSession[nextcloud.session_storage_key]}`,
+          `Bearer ${req.appSession[opencloud.session_storage_key]}`,
         );
       },
       onProxyRes: function (proxyRes, req, res) {
@@ -48,7 +49,7 @@ if (nextcloud.enabled && nextcloud.url) {
   );
 } else {
   router.use("/", (req, res) => {
-    res.status(404).json({ error: "Nextcloud integration is not enabled" });
+    res.status(404).json({ error: "OpenCloud integration is not enabled" });
   });
 }
 
