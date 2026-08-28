@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Build the intercom-service image and publish it to GHCR.
+# GitHub is the main source repo; GHCR (ghcr.io/tobias-weiss-ai-xr/...) is the image registry.
+name: build-push-ghcr
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  # Full path mirrors the old opencode.de layout so cluster refs are a clean host-swap:
+  #   registry.opencode.de/umr/opendesk-edu/opendesk-nix/intercom-service
+  #   -> ghcr.io/tobias-weiss-ai-xr/umr/opendesk-edu/opendesk-nix/intercom-service
+  IMAGE_NAME: tobias-weiss-ai-xr/umr/opendesk-edu/opendesk-nix/intercom-service
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # git tags (v2.9.0 -> 2.9.0) and raw tag name
+            type=semver,pattern={{version}}
+            type=ref,event=tag
+            # branch name (main) and short sha for branch pushes
+            type=ref,event=branch
+            type=sha,prefix=sha-,format=short
+            # 'latest' only on tagged releases
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/intercom-service/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
